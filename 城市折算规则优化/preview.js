@@ -9,7 +9,7 @@ return {
     return {
       zhCN: UI.zhCN, theme: UI.theme, departmentFieldNames: UI.departmentFieldNames,
       filters: {}, applied: {}, scope: [], snapshot: null, error: '', errorDetails: [],
-      busy: false, refreshing: false, tab: 'generated', page: 1, pageSize: 20,
+      busy: false, refreshing: false, exporting: false, tab: 'generated', page: 1, pageSize: 20,
       amountFields: C.fields.slice(7)
     };
   },
@@ -56,12 +56,15 @@ return {
         this.errorDetails = error.details || [];
       } finally { this.refreshing = false; }
     },
-    exportExcel() {
-      if (!this.snapshot || this.error) return;
+    async exportExcel() {
+      if (!this.snapshot || this.error || this.exporting) return;
+      this.exporting = true;
+      const snapshot = this.snapshot;
       try {
+        const XLSX = await window.loadPrototypeExcel();
         const book = XLSX.utils.book_new();
         for (const retained of [false, true]) {
-          const list = retained ? this.snapshot.retained : this.snapshot.records;
+          const list = retained ? snapshot.retained : snapshot.records;
           const data = [retained ? [...C.labels, '保留原因'] : C.labels];
           for (const item of list) {
             const row = retained ? item.row : item;
@@ -84,6 +87,7 @@ return {
         XLSX.writeFile(book, '海外中位薪折算预览-' + new Date().toISOString().slice(0, 10) + '.xlsx');
         antd.message.success('已导出本次全部方案的完整明细');
       } catch (error) { antd.message.error('导出失败：' + error.message); }
+      finally { this.exporting = false; }
     },
     back() { if (!this.busy) this.$emit('cancel'); },
     confirm() {

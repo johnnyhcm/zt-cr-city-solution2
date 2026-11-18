@@ -5,23 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>海外中位薪城市折算</title>
   <link rel="stylesheet" href="assets/unpkg.com/ant-design-vue@4.2.6/dist/reset.css" />
-  <script src="assets/unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="assets/unpkg.com/dayjs@1.11.13/dayjs.min.js"></script>
-  <script src="assets/unpkg.com/dayjs@1.11.13/locale/zh-cn.js"></script>
   <!-- 原型说明: antd 的 UMD 包在全局分支下依赖下列 dayjs 插件全局变量，缺失会导致 antd is not defined；顺序不可调整 -->
-  <script src="assets/unpkg.com/dayjs@1.11.13/plugin/advancedFormat.js"></script>
-  <script src="assets/unpkg.com/dayjs@1.11.13/plugin/customParseFormat.js"></script>
-  <script src="assets/unpkg.com/dayjs@1.11.13/plugin/localeData.js"></script>
-  <script src="assets/unpkg.com/dayjs@1.11.13/plugin/quarterOfYear.js"></script>
-  <script src="assets/unpkg.com/dayjs@1.11.13/plugin/weekOfYear.js"></script>
-  <script src="assets/unpkg.com/dayjs@1.11.13/plugin/weekYear.js"></script>
-  <script src="assets/unpkg.com/dayjs@1.11.13/plugin/weekday.js"></script>
-  <script src="assets/unpkg.com/ant-design-vue@4.2.6/dist/antd.min.js"></script>
   <link rel="stylesheet" href="prototype.css" />
   <!-- 原型说明: Vue3 / Ant Design Vue4 的本地CDN副本；遵循已确认的系统组件与布局。 -->
 </head>
 <body>
 <div id="app"></div>
+  <div id="boot-state" role="status" aria-live="polite" style="padding:80px 10%;font:12px sans-serif;color:#666">
+    <div style="height:30px;width:240px;background:#e8eef9;border-radius:6px;margin-bottom:24px"></div>
+    <p id="boot-message">正在加载页面，请稍候…</p>
+    <div style="height:120px;background:#f5f7fd;border-radius:8px;margin:24px 0"></div>
+    <div style="height:240px;background:#f5f7fd;border-radius:8px;margin-bottom:16px"></div>
+    <a id="boot-retry" href="" style="display:none;color:#0E66FB" onclick="location.reload();return false">重新加载</a>
+  </div>
+<script>
+  function showBootRetry(text) {
+    if (!document.getElementById('boot-state')) return;
+    document.getElementById('boot-message').textContent = text;
+    document.getElementById('boot-retry').style.display = 'inline';
+  }
+  setTimeout(() => showBootRetry('加载较慢，请稍候或重新加载。'), 15000);
+  window.addEventListener('error', () => showBootRetry('页面加载失败，请重新加载。'), true);
+</script>
 
 <script type="text/x-template" id="page-tpl">
 <a-config-provider :locale="zhCN" :theme="theme">
@@ -143,7 +148,7 @@
 </template>
 <section class="table-main card-shadow">
   <a-tabs v-model:active-key="tab" class="preview-tabs" @change="page = 1">
-    <template #rightExtra><div class="preview-toolbar"><a-button :loading="refreshing" :disabled="busy || !ids.length" @click="refresh"><template #icon><i-reload /></template>刷新预览</a-button><a-button :disabled="!snapshot || !!error || busy" @click="exportExcel"><template #icon><i-download /></template>导出 Excel</a-button></div></template>
+    <template #rightExtra><div class="preview-toolbar"><a-button :loading="refreshing" :disabled="busy || !ids.length" @click="refresh"><template #icon><i-reload /></template>刷新预览</a-button><a-button :loading="exporting" :disabled="!snapshot || !!error || busy || exporting" @click="exportExcel"><template #icon><i-download /></template>导出 Excel</a-button></div></template>
     <a-tab-pane key="generated" :tab="'折算明细(' + (snapshot?.records.length || 0) + ')'" />
     <a-tab-pane v-if="snapshot?.retained.length" key="retained" :tab="'保留原值(' + snapshot.retained.length + ')'" />
   </a-tabs>
@@ -156,12 +161,8 @@
 
 </a-modal>
 </script>
-
-<script src="../海外薪酬中位值/data.js"></script>
-<script src="../海外薪酬中位值/assets/xlsx.full.min.js"></script>
-<script src="conversion.js"></script>
-<script src="ui.js"></script>
-<script src="preview.js"></script>
-<script src="index.js"></script>
+<script defer src="assets/vendor.159e6ddd8b26.js"></script>
+<script defer src="../海外薪酬中位值/data.js"></script>
+<script defer src="app.50f0562f3017.js"></script>
 </body>
 </html>

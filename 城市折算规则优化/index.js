@@ -112,3 +112,4 @@ const app = Vue.createApp({
 });
 app.component('execution-preview', window.CityPreview);
 UI.mount(app);
+document.getElementById('boot-state')?.remove();
