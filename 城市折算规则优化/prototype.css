@@ -288,6 +288,9 @@
     .tier-table th:nth-child(2) { width:130px; }
     .tier-table th:last-child { width:120px; }
     .tier-table .ant-input-number, .tier-table .ant-select { width:100%; }
+    .tier-table td > .ant-input, .tier-table td > .ant-input-number, .tier-table td > .ant-select { vertical-align:top; }
+    .tier-table .ant-input-number { padding:0; }
+    .tier-table .ant-input-number-input { height:28px; }
     .tier-table .ant-select-selection-item { max-width:100%; }
     .rule-modal { top:6vh; max-width:calc(100vw - 32px); padding-bottom:0; }
     .rule-modal .ant-modal-body { max-height:calc(88vh - 120px); overflow:auto; padding:20px; }
