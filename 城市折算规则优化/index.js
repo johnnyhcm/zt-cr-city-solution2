@@ -6,7 +6,7 @@ const app = Vue.createApp({
     return {
       zhCN: UI.zhCN, theme: UI.theme, departmentOptions: UI.departmentOptions, departmentFieldNames: UI.departmentFieldNames,
       rules: [], filters: { status: 'enabled' }, applied: { status: 'enabled' }, selected: [], page: 1, pageSize: 20,
-      draft: null, editingId: null, errors: {}, fatal: '', saving: false, previewIds: null,
+      draft: null, editingId: null, errors: {}, submitted: false, tierSequence: 0, fatal: '', saving: false, previewIds: null,
       countryOptions: C.countries.map(country => ({ label: country.name, value: country.id })),
       statusOptions: [{ label: '启用', value: 'enabled' }, { label: '停用', value: 'disabled' }],
       columns: [
@@ -29,9 +29,12 @@ const app = Vue.createApp({
       return { selectedRowKeys: this.selected, onChange: keys => { this.selected = keys; }, getCheckboxProps: rule => ({ disabled: !rule.enabled, name: rule.id }) };
     },
     editorCountries() {
-      return this.countryOptions.map(option => ({ ...option, disabled: !this.editingId && this.rules.some(rule => rule.department === this.draft?.department && rule.country === option.value) }));
+      return this.countryOptions.map(option => ({ ...option, label: option.label + ' ' + option.value, disabled: !this.editingId && this.rules.some(rule => rule.department === this.draft?.department && rule.country === option.value) }));
     },
     baseCities() { return this.optionsForCities().map(city => ({ label: city, value: city })); }
+  },
+  watch: {
+    draft: { deep: true, handler() { if (this.draft && this.submitted) this.validateDraft(); } }
   },
   created() {
     try {
@@ -53,10 +56,12 @@ const app = Vue.createApp({
     reset() { this.filters = { status: 'enabled' }; this.search(); },
     changePage(pagination) { this.page = pagination.current; this.pageSize = pagination.pageSize; },
     openNew() {
-      this.editingId = null; this.errors = {};
-      this.draft = { department: this.filters.department || C.departments[0], country: undefined, baseline: undefined, tiers: [{ name: '', factor: null, cities: [] }] };
+      this.editingId = null; this.errors = {}; this.submitted = false;
+      this.draft = { department: this.filters.department || C.departments[0], country: undefined, baseline: undefined, enabled: true, tiers: [this.createTier()] };
     },
-    openEdit(rule) { this.editingId = rule.id; this.errors = {}; this.draft = C.copy(rule); this.draft.baseline ||= undefined; },
+    openEdit(rule) { this.editingId = rule.id; this.errors = {}; this.submitted = false; this.draft = C.copy(rule); this.draft.baseline ||= undefined; this.draft.tiers.forEach(tier => { tier.uid = 'tier-' + (++this.tierSequence); }); },
+    createTier() { return { uid: 'tier-' + (++this.tierSequence), name: '', factor: null, cities: [] }; },
+    changeCountry(country) { this.draft.country = country; this.changeScope(); },
     changeScope() {
       if (!this.draft) return;
       if (!this.editingId && this.rules.some(rule => rule.department === this.draft.department && rule.country === this.draft.country)) this.draft.country = undefined;
@@ -68,20 +73,45 @@ const app = Vue.createApp({
       if (!this.draft?.country) return [];
       return C.cityCatalog(C.read(localStorage), this.draft.country);
     },
-    cityOptions(index) {
-      const used = new Set(this.draft.tiers.filter((_, i) => i !== index).flatMap(tier => tier.cities));
-      return this.optionsForCities().map(city => ({ label: city, value: city, disabled: used.has(city) }));
+    cityOptions(tier) {
+      const used = new Map();
+      for (const other of this.draft.tiers) if (other.uid !== tier.uid) {
+        for (const city of other.cities) used.set(city, other.name.trim() || '未命名档位');
+      }
+      return this.optionsForCities().map(city => ({ label: used.has(city) ? city + '（已归入' + used.get(city) + '）' : city, value: city, disabled: used.has(city) }));
     },
-    addTier() { this.draft.tiers.push({ name: '', factor: null, cities: [] }); this.errors = {}; },
-    removeTier(index) {
-      antd.Modal.confirm({ title: '删除档次', content: '确定删除该档次及其城市归档？薪酬中位值表中的已有记录保留。', okText: '删除', cancelText: '取消', okButtonProps: { danger: true }, onOk: () => { this.draft.tiers.splice(index, 1); this.errors = {}; } });
+    addTier() {
+      if (!this.draft.country) return;
+      const tier = this.createTier(); this.draft.tiers.push(tier);
+      this.$nextTick(() => document.getElementById('tier-name-' + tier.uid)?.focus());
+    },
+    moveTier(index, step) {
+      const target = index + step;
+      if (!this.draft.country || target < 0 || target >= this.draft.tiers.length) return;
+      const [tier] = this.draft.tiers.splice(index, 1); this.draft.tiers.splice(target, 0, tier);
+    },
+    removeTier(tier) {
+      if (this.draft.tiers.length <= 1) return;
+      const remove = () => { this.draft.tiers = this.draft.tiers.filter(item => item.uid !== tier.uid); };
+      if (!tier.name.trim() && tier.factor == null && !tier.cities.length) { remove(); return; }
+      antd.Modal.confirm({ content: tier.name.trim() ? '将删除 ' + tier.name.trim() + '档位及其城市配置。' : '将删除该档位及其城市配置。', okText: '删除', cancelText: '取消', okType: 'danger', onOk: remove });
+    },
+    validateDraft() { this.errors = C.ruleErrors(this.draft, C.read(localStorage), this.editingId); },
+    focusFirstError() {
+      this.$nextTick(() => {
+        const field = document.querySelector('.rule-modal .ant-select-status-error input, .rule-modal input.ant-input-status-error, .rule-modal .ant-input-number-status-error input');
+        const target = field || document.querySelector('.rule-modal .field-error:not(.field-label .field-error)');
+        target?.scrollIntoView({ block: 'center', behavior: 'auto' }); field?.focus({ preventScroll: true });
+      });
     },
     saveDraft() {
+      this.submitted = true;
       this.saving = true;
       try {
         const result = C.saveRule(localStorage, this.draft, this.editingId);
         this.errors = result.errors || {};
         if (result.rule) { this.draft = null; this.reload(); this.selected = []; antd.message.success('折算方案已保存'); }
+        else this.focusFirstError();
       } catch (error) { antd.message.error(error.message); }
       finally { this.saving = false; }
     },

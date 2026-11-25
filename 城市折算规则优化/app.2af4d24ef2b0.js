@@ -96,15 +96,15 @@
     if (!countries.some(country => country.id === rule.country)) errors.country = '请选择国家';
     if (state.cityConversion.rules.some(item => item.id !== editingId && item.id === ruleKey(rule.department, rule.country))) errors.country = '该二级部门、国家已有方案，请编辑已有方案';
     if (editingId && editingId !== ruleKey(rule.department, rule.country)) errors.department = '编辑时不能修改二级部门或国家';
+    if (!countries.some(country => country.id === rule.country)) return errors;
     const catalog = cityCatalog(state, rule.country);
     if (rule.baseline && !catalog.includes(rule.baseline)) errors.baseline = '请选择本国城市';
     if (rule.department && rule.country && !baselines(state, rule).length) errors.baseline = '薪酬中位值表中没有对应基准记录，请先维护';
-    if (!rule.tiers.length) errors.tiers = '请新增档次并选择适用城市';
-    const names = new Set(), cities = new Set();
+    if (!rule.tiers.length) errors.tiers = '请新增档位并选择适用城市';
+    const cities = new Set();
     rule.tiers.forEach((tier, i) => {
       const name = String(tier.name || '').trim();
-      if (!name || names.has(name)) errors['name' + i] = name ? '档次名称不能重复' : '请输入档次名称';
-      names.add(name);
+      if (!name || rule.tiers.some((other, j) => j !== i && String(other.name || '').trim() === name)) errors['name' + i] = name ? '档位名称不能重复' : '请输入档位名称';
       if (!Number.isFinite(tier.factor) || tier.factor <= 0) errors['factor' + i] = '请输入大于0的系数';
       if (!tier.cities.length) errors['cities' + i] = '每个档位至少选择一个城市';
       for (const city of tier.cities) {
@@ -122,8 +122,8 @@
     const current = rules.find(rule => rule.id === editingId);
     if (editingId && !current) throw new Error('方案不存在，请重新查询');
     const rule = { id: ruleKey(draft.department, draft.country), department: draft.department, country: draft.country,
-      baseline: norm(draft.baseline), tiers: copy(draft.tiers).map(tier => ({ ...tier, name: tier.name.trim() })),
-      enabled: current ? current.enabled : true, editedAt: new Date().toISOString(), executedAt: current?.executedAt || null };
+      baseline: norm(draft.baseline), tiers: draft.tiers.map(tier => ({ name: tier.name.trim(), factor: tier.factor, cities: [...tier.cities] })),
+      enabled: draft.enabled ?? current?.enabled ?? true, editedAt: new Date().toISOString(), executedAt: current?.executedAt || null };
     if (current) rules[rules.indexOf(current)] = rule; else rules.push(rule);
     save(storage, state);
     return { rule };
@@ -278,6 +278,8 @@ const ICONS = {
     // bootstrap-icons/icons/sd-card.svg（系统里「保存查询方案」用 bi bi-sd-card）
     'i-sdcard': ['0 0 16 16', '<path d="M6.25 3.5a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0zm2 0a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0zm2 0a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0zm2 0a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0z"/><path fill-rule="evenodd" d="M5.914 0H12.5A1.5 1.5 0 0 1 14 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5V3.914c0-.398.158-.78.44-1.06L4.853.439A1.5 1.5 0 0 1 5.914 0M13 1.5a.5.5 0 0 0-.5-.5H5.914a.5.5 0 0 0-.353.146L3.146 3.561A.5.5 0 0 0 3 3.914V14.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5z"/>']
   };
+ICONS['i-arrow-up']=['0 0 16 16','<path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'];
+ICONS['i-arrow-down']=['0 0 16 16','<path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'];
 ICONS['i-stop']=['0 0 24 24','<path d="M6 4h4v16H6zm8 0h4v16h-4z"/>'];
 ICONS['i-play']=['0 0 24 24','<path d="M8 4v16l13-8z"/>'];
 function mount(app){
@@ -440,7 +442,7 @@ const app = Vue.createApp({
     return {
       zhCN: UI.zhCN, theme: UI.theme, departmentOptions: UI.departmentOptions, departmentFieldNames: UI.departmentFieldNames,
       rules: [], filters: { status: 'enabled' }, applied: { status: 'enabled' }, selected: [], page: 1, pageSize: 20,
-      draft: null, editingId: null, errors: {}, fatal: '', saving: false, previewIds: null,
+      draft: null, editingId: null, errors: {}, submitted: false, tierSequence: 0, fatal: '', saving: false, previewIds: null,
       countryOptions: C.countries.map(country => ({ label: country.name, value: country.id })),
       statusOptions: [{ label: '启用', value: 'enabled' }, { label: '停用', value: 'disabled' }],
       columns: [
@@ -463,9 +465,12 @@ const app = Vue.createApp({
       return { selectedRowKeys: this.selected, onChange: keys => { this.selected = keys; }, getCheckboxProps: rule => ({ disabled: !rule.enabled, name: rule.id }) };
     },
     editorCountries() {
-      return this.countryOptions.map(option => ({ ...option, disabled: !this.editingId && this.rules.some(rule => rule.department === this.draft?.department && rule.country === option.value) }));
+      return this.countryOptions.map(option => ({ ...option, label: option.label + ' ' + option.value, disabled: !this.editingId && this.rules.some(rule => rule.department === this.draft?.department && rule.country === option.value) }));
     },
     baseCities() { return this.optionsForCities().map(city => ({ label: city, value: city })); }
+  },
+  watch: {
+    draft: { deep: true, handler() { if (this.draft && this.submitted) this.validateDraft(); } }
   },
   created() {
     try {
@@ -487,10 +492,12 @@ const app = Vue.createApp({
     reset() { this.filters = { status: 'enabled' }; this.search(); },
     changePage(pagination) { this.page = pagination.current; this.pageSize = pagination.pageSize; },
     openNew() {
-      this.editingId = null; this.errors = {};
-      this.draft = { department: this.filters.department || C.departments[0], country: undefined, baseline: undefined, tiers: [{ name: '', factor: null, cities: [] }] };
+      this.editingId = null; this.errors = {}; this.submitted = false;
+      this.draft = { department: this.filters.department || C.departments[0], country: undefined, baseline: undefined, enabled: true, tiers: [this.createTier()] };
     },
-    openEdit(rule) { this.editingId = rule.id; this.errors = {}; this.draft = C.copy(rule); this.draft.baseline ||= undefined; },
+    openEdit(rule) { this.editingId = rule.id; this.errors = {}; this.submitted = false; this.draft = C.copy(rule); this.draft.baseline ||= undefined; this.draft.tiers.forEach(tier => { tier.uid = 'tier-' + (++this.tierSequence); }); },
+    createTier() { return { uid: 'tier-' + (++this.tierSequence), name: '', factor: null, cities: [] }; },
+    changeCountry(country) { this.draft.country = country; this.changeScope(); },
     changeScope() {
       if (!this.draft) return;
       if (!this.editingId && this.rules.some(rule => rule.department === this.draft.department && rule.country === this.draft.country)) this.draft.country = undefined;
@@ -502,20 +509,45 @@ const app = Vue.createApp({
       if (!this.draft?.country) return [];
       return C.cityCatalog(C.read(localStorage), this.draft.country);
     },
-    cityOptions(index) {
-      const used = new Set(this.draft.tiers.filter((_, i) => i !== index).flatMap(tier => tier.cities));
-      return this.optionsForCities().map(city => ({ label: city, value: city, disabled: used.has(city) }));
+    cityOptions(tier) {
+      const used = new Map();
+      for (const other of this.draft.tiers) if (other.uid !== tier.uid) {
+        for (const city of other.cities) used.set(city, other.name.trim() || '未命名档位');
+      }
+      return this.optionsForCities().map(city => ({ label: used.has(city) ? city + '（已归入' + used.get(city) + '）' : city, value: city, disabled: used.has(city) }));
     },
-    addTier() { this.draft.tiers.push({ name: '', factor: null, cities: [] }); this.errors = {}; },
-    removeTier(index) {
-      antd.Modal.confirm({ title: '删除档次', content: '确定删除该档次及其城市归档？薪酬中位值表中的已有记录保留。', okText: '删除', cancelText: '取消', okButtonProps: { danger: true }, onOk: () => { this.draft.tiers.splice(index, 1); this.errors = {}; } });
+    addTier() {
+      if (!this.draft.country) return;
+      const tier = this.createTier(); this.draft.tiers.push(tier);
+      this.$nextTick(() => document.getElementById('tier-name-' + tier.uid)?.focus());
+    },
+    moveTier(index, step) {
+      const target = index + step;
+      if (!this.draft.country || target < 0 || target >= this.draft.tiers.length) return;
+      const [tier] = this.draft.tiers.splice(index, 1); this.draft.tiers.splice(target, 0, tier);
+    },
+    removeTier(tier) {
+      if (this.draft.tiers.length <= 1) return;
+      const remove = () => { this.draft.tiers = this.draft.tiers.filter(item => item.uid !== tier.uid); };
+      if (!tier.name.trim() && tier.factor == null && !tier.cities.length) { remove(); return; }
+      antd.Modal.confirm({ content: tier.name.trim() ? '将删除 ' + tier.name.trim() + '档位及其城市配置。' : '将删除该档位及其城市配置。', okText: '删除', cancelText: '取消', okType: 'danger', onOk: remove });
+    },
+    validateDraft() { this.errors = C.ruleErrors(this.draft, C.read(localStorage), this.editingId); },
+    focusFirstError() {
+      this.$nextTick(() => {
+        const field = document.querySelector('.rule-modal .ant-select-status-error input, .rule-modal input.ant-input-status-error, .rule-modal .ant-input-number-status-error input');
+        const target = field || document.querySelector('.rule-modal .field-error:not(.field-label .field-error)');
+        target?.scrollIntoView({ block: 'center', behavior: 'auto' }); field?.focus({ preventScroll: true });
+      });
     },
     saveDraft() {
+      this.submitted = true;
       this.saving = true;
       try {
         const result = C.saveRule(localStorage, this.draft, this.editingId);
         this.errors = result.errors || {};
         if (result.rule) { this.draft = null; this.reload(); this.selected = []; antd.message.success('折算方案已保存'); }
+        else this.focusFirstError();
       } catch (error) { antd.message.error(error.message); }
       finally { this.saving = false; }
     },

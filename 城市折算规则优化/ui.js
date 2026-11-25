@@ -40,6 +40,8 @@ const ICONS = {
     // bootstrap-icons/icons/sd-card.svg（系统里「保存查询方案」用 bi bi-sd-card）
     'i-sdcard': ['0 0 16 16', '<path d="M6.25 3.5a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0zm2 0a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0zm2 0a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0zm2 0a.75.75 0 0 0-1.5 0v2a.75.75 0 0 0 1.5 0z"/><path fill-rule="evenodd" d="M5.914 0H12.5A1.5 1.5 0 0 1 14 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5V3.914c0-.398.158-.78.44-1.06L4.853.439A1.5 1.5 0 0 1 5.914 0M13 1.5a.5.5 0 0 0-.5-.5H5.914a.5.5 0 0 0-.353.146L3.146 3.561A.5.5 0 0 0 3 3.914V14.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5z"/>']
   };
+ICONS['i-arrow-up']=['0 0 16 16','<path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'];
+ICONS['i-arrow-down']=['0 0 16 16','<path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'];
 ICONS['i-stop']=['0 0 24 24','<path d="M6 4h4v16H6zm8 0h4v16h-4z"/>'];
 ICONS['i-play']=['0 0 24 24','<path d="M8 4v16l13-8z"/>'];
 function mount(app){

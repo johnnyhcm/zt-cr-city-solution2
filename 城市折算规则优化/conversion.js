@@ -96,15 +96,15 @@
     if (!countries.some(country => country.id === rule.country)) errors.country = '请选择国家';
     if (state.cityConversion.rules.some(item => item.id !== editingId && item.id === ruleKey(rule.department, rule.country))) errors.country = '该二级部门、国家已有方案，请编辑已有方案';
     if (editingId && editingId !== ruleKey(rule.department, rule.country)) errors.department = '编辑时不能修改二级部门或国家';
+    if (!countries.some(country => country.id === rule.country)) return errors;
     const catalog = cityCatalog(state, rule.country);
     if (rule.baseline && !catalog.includes(rule.baseline)) errors.baseline = '请选择本国城市';
     if (rule.department && rule.country && !baselines(state, rule).length) errors.baseline = '薪酬中位值表中没有对应基准记录，请先维护';
-    if (!rule.tiers.length) errors.tiers = '请新增档次并选择适用城市';
-    const names = new Set(), cities = new Set();
+    if (!rule.tiers.length) errors.tiers = '请新增档位并选择适用城市';
+    const cities = new Set();
     rule.tiers.forEach((tier, i) => {
       const name = String(tier.name || '').trim();
-      if (!name || names.has(name)) errors['name' + i] = name ? '档次名称不能重复' : '请输入档次名称';
-      names.add(name);
+      if (!name || rule.tiers.some((other, j) => j !== i && String(other.name || '').trim() === name)) errors['name' + i] = name ? '档位名称不能重复' : '请输入档位名称';
       if (!Number.isFinite(tier.factor) || tier.factor <= 0) errors['factor' + i] = '请输入大于0的系数';
       if (!tier.cities.length) errors['cities' + i] = '每个档位至少选择一个城市';
       for (const city of tier.cities) {
@@ -122,8 +122,8 @@
     const current = rules.find(rule => rule.id === editingId);
     if (editingId && !current) throw new Error('方案不存在，请重新查询');
     const rule = { id: ruleKey(draft.department, draft.country), department: draft.department, country: draft.country,
-      baseline: norm(draft.baseline), tiers: copy(draft.tiers).map(tier => ({ ...tier, name: tier.name.trim() })),
-      enabled: current ? current.enabled : true, editedAt: new Date().toISOString(), executedAt: current?.executedAt || null };
+      baseline: norm(draft.baseline), tiers: draft.tiers.map(tier => ({ name: tier.name.trim(), factor: tier.factor, cities: [...tier.cities] })),
+      enabled: draft.enabled ?? current?.enabled ?? true, editedAt: new Date().toISOString(), executedAt: current?.executedAt || null };
     if (current) rules[rules.indexOf(current)] = rule; else rules.push(rule);
     save(storage, state);
     return { rule };

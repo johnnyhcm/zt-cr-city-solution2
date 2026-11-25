@@ -94,33 +94,98 @@
     </main>
   </div>
 
-<a-modal v-if="draft" :open="true" :title="editingId ? '编辑折算方案' : '新增折算方案'" class="custom-modal rule-modal" :width="960" :mask-closable="false" ok-text="保存" cancel-text="取消" :confirm-loading="saving" @ok="saveDraft" @cancel="draft = null">
-  <div class="overview-row">
-    <div><label class="field-label" for="editor-department"><span class="required">*</span>二级部门</label>
-      <!-- 对应 DeptTreeSelect；编辑时锁定方案范围 -->
-      <a-tree-select id="editor-department" v-model:value="draft.department" class="org-tree-module org-tree" :tree-data="departmentOptions" :field-names="departmentFieldNames" tree-node-filter-prop="name" :disabled="!!editingId" show-search placeholder="请选择二级部门" :status="errors.department ? 'error' : undefined" @change="changeScope" />
-      <div v-if="errors.department" class="field-error" role="alert">{{ errors.department }}</div>
-    </div>
-    <div><label class="field-label" for="editor-country"><span class="required">*</span>国家</label>
-      <a-select id="editor-country" v-model:value="draft.country" class="my-select" :options="editorCountries" :disabled="!!editingId" show-search option-filter-prop="label" placeholder="请选择国家" :status="errors.country ? 'error' : undefined" @change="changeScope" />
-      <div v-if="errors.country" class="field-error" role="alert">{{ errors.country }}</div>
-    </div>
-  </div>
-  <div class="base-city-field"><label class="field-label" for="editor-baseline">基准</label>
-    <div class="base-city-control"><a-select id="editor-baseline" v-model:value="draft.baseline" class="my-select" :options="baseCities" :disabled="!draft.country" show-search allow-clear option-filter-prop="label" placeholder="请选择城市" :status="errors.baseline ? 'error' : undefined" /><span class="field-help">以某个城市作为折算的基准，若不填则以国家标准为基准</span></div>
-    <div v-if="errors.baseline" class="field-error" role="alert">{{ errors.baseline }}。<a href="../海外薪酬中位值/index.html" target="_blank" rel="noopener">查看当前海外薪酬中位值</a></div>
-  </div>
-  <div class="modal-section"><h2 class="section-title">档位系数与城市</h2><a-button @click="addTier"><template #icon><i-plus /></template>新增档次</a-button></div>
-  <table class="tier-table"><thead><tr><th>档次名称</th><th>折算系数</th><th>适用城市</th><th>操作</th></tr></thead>
-    <tbody><tr v-for="(tier,index) in draft.tiers" :key="index">
-      <td><!-- 对应 MyInput --><a-input v-model:value="tier.name" class="my-input-components" :aria-label="'档次名称 ' + (index+1)" placeholder="请输入" :maxlength="30" :status="errors['name'+index] ? 'error' : undefined" /><div v-if="errors['name'+index]" class="field-error" role="alert">{{ errors['name'+index] }}</div></td>
-      <td><a-input-number v-model:value="tier.factor" :aria-label="'折算系数 ' + (index+1)" placeholder="请输入" :step="0.01" :status="errors['factor'+index] ? 'error' : undefined" /><div v-if="errors['factor'+index]" class="field-error" role="alert">{{ errors['factor'+index] }}</div></td>
-      <td><!-- 对应 MySelect multiple；基准城市可选，同城不得跨档重复 --><a-select v-model:value="tier.cities" class="my-select" mode="multiple" :aria-label="'适用城市 ' + (index+1)" :options="cityOptions(index)" :disabled="!draft.country" show-search allow-clear option-filter-prop="label" placeholder="请选择适用城市" :status="errors['cities'+index] ? 'error' : undefined" /><div v-if="errors['cities'+index]" class="field-error" role="alert">{{ errors['cities'+index] }}</div></td>
-      <td><a-tooltip title="删除"><button class="table-icon-btn is-danger" type="button" :aria-label="'删除档次 ' + (index+1)" @click="removeTier(index)"><i-delete /></button></a-tooltip></td>
-    </tr></tbody>
-  </table>
-  <div v-if="errors.tiers" class="field-error" role="alert">{{ errors.tiers }}</div>
-</a-modal>
+<a-modal v-if="draft" :open="true" class="custom-modal rule-modal" :title="!editingId ? '新增城市折算规则' : '配置城市折算规则'" :width="800"
+      :mask-closable="false" ok-text="保存" cancel-text="取消" @ok="saveDraft" :confirm-loading="saving" @cancel="draft = null">
+      <div class="overview-row">
+        <div>
+          <span class="field-label" id="department-label"><span class="field-error">*</span> 二级部门</span>
+          <!-- 对应 DeptTreeSelect；新增可选，编辑回显且禁用 -->
+          <a-tree-select id="editor-department" v-model:value="draft.department" @change="changeScope" class="org-tree-module org-tree department-select"
+            :tree-data="departmentOptions" :field-names="departmentFieldNames" tree-node-filter-prop="name"
+            aria-labelledby="department-label" placeholder="请选择二级部门" show-search :disabled="!!editingId"
+            :status="errors.department ? 'error' : undefined" />
+          <div v-if="errors.department" class="field-error" role="alert">{{ errors.department }}</div>
+        </div>
+        <div>
+          <span class="field-label" id="country-label"><span v-if="!editingId" class="field-error">*</span> 国家</span>
+          <a-select v-if="!editingId" id="editor-country" class="country-select" :value="draft.country" :options="editorCountries"
+            aria-labelledby="country-label" placeholder="请选择国家" option-filter-prop="label" show-search
+            :status="errors.country ? 'error' : undefined" @change="changeCountry" />
+          <a-select v-else id="editor-country" class="country-select" :value="draft.country" disabled aria-labelledby="country-label"
+            :options="[{ value: draft.country, label: countryName(draft.country) + ' ' + draft.country }]" />
+          <div v-if="errors.country" class="field-error" role="alert">{{ errors.country }}</div>
+        </div>
+        <div><span class="field-label" id="enabled-label">启用城市折算</span>
+          <div class="enabled-control">
+            <a-switch v-model:checked="draft.enabled" aria-labelledby="enabled-label" />
+            <span>{{ draft.enabled ? '已启用' : '未启用' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="base-city-field">
+        <span class="field-label" id="base-city-label">基准城市</span>
+        <div class="base-city-control">
+          <!-- 对应 MySelect；本国城市单选，空值代表国家标准 -->
+          <a-select id="editor-baseline" v-model:value="draft.baseline" class="my-select" :options="baseCities" show-search allow-clear
+            option-filter-prop="label" aria-labelledby="base-city-label" :disabled="!draft.country"
+            :placeholder="draft.country ? '请选择基准城市（可为空）' : '请先选择国家'" />
+          <span class="field-help">以某个城市作为折算基准，若为空，则以国家标准为基准。</span>
+        </div>
+        <div v-if="errors.baseline" class="field-error" role="alert">{{ errors.baseline }}。<a href="../海外薪酬中位值/index.html" target="_blank" rel="noopener">查看当前海外薪酬中位值</a></div>
+      </div>
+      <div class="modal-section">
+        <h2 class="section-title">城市档位与折算系数</h2>
+        <div class="rule-list-actions">
+          <a-button size="small" :disabled="!draft.country" @click="addTier"><template #icon><i-plus /></template>新增档位</a-button>
+        </div>
+      </div>
+      <p v-if="!draft.country" class="field-help" style="margin:0 0 10px">请先选择国家，再配置档位、系数和城市。</p>
+      <table class="tier-table">
+        <thead><tr><th scope="col"><span class="field-error">*</span> 档位名称</th><th scope="col"><span class="field-error">*</span> 折算系数</th><th scope="col"><span class="field-error">*</span> 适用城市</th><th scope="col">操作</th></tr></thead>
+        <tbody>
+          <tr v-for="(tier, index) in draft.tiers" :key="tier.uid">
+            <td>
+              <!-- 对应 MyInput；档位名称可编辑 -->
+              <a-input v-model:value="tier.name" class="my-input-components" :id="'tier-name-' + tier.uid"
+                :aria-label="'第' + (index + 1) + '行档位名称'" placeholder="请输入档位名称" :disabled="!draft.country"
+                :status="errors['name' + index] ? 'error' : undefined" />
+              <div v-if="errors['name' + index]" class="field-error">{{ errors['name' + index] }}</div>
+            </td>
+            <td>
+              <a-input-number v-model:value="tier.factor" :step="0.01" placeholder="请输入"
+                :aria-label="'第' + (index + 1) + '行折算系数'" :disabled="!draft.country"
+                :status="errors['factor' + index] ? 'error' : undefined" />
+              <div v-if="errors['factor' + index]" class="field-error" role="alert">{{ errors['factor' + index] }}</div>
+            </td>
+            <td>
+              <!-- 对应多选下拉 a-select；按当前国家筛选工作城市 -->
+              <a-select v-model:value="tier.cities" mode="multiple" show-search allow-clear
+                :aria-label="'第' + (index + 1) + '行适用城市'" :disabled="!draft.country" option-filter-prop="label" :placeholder="draft.country ? '请选择适用城市' : '请先选择国家'"
+                :status="errors['cities' + index] ? 'error' : undefined"
+                :options="cityOptions(tier)" />
+              <div v-if="errors['cities' + index]" class="field-error">{{ errors['cities' + index] }}</div>
+            </td>
+            <td>
+              <div class="tier-actions">
+                <a-tooltip title="上移档位">
+                  <span><button type="button" class="table-icon-btn" :aria-label="'上移第' + (index + 1) + '行档位'"
+                    :disabled="!draft.country || index === 0" @click="moveTier(index, -1)"><i-arrow-up /></button></span>
+                </a-tooltip>
+                <a-tooltip title="下移档位">
+                  <span><button type="button" class="table-icon-btn" :aria-label="'下移第' + (index + 1) + '行档位'"
+                    :disabled="!draft.country || index === draft.tiers.length - 1" @click="moveTier(index, 1)"><i-arrow-down /></button></span>
+                </a-tooltip>
+                <a-tooltip v-if="draft.tiers.length > 1" title="删除档位">
+                  <button type="button" class="table-icon-btn is-danger" :aria-label="'删除第' + (index + 1) + '行档位'" @click="removeTier(tier)"><i-delete /></button>
+                </a-tooltip>
+              </div>
+            </td>
+          </tr>
+          <tr v-if="!draft.tiers.length"><td colspan="4" style="text-align:center" class="muted">暂无档位，请点击“新增档位”</td></tr>
+        </tbody>
+      </table>
+      <div v-if="errors.tiers" class="field-error" role="alert">{{ errors.tiers }}</div>
+    </a-modal>
 
 <execution-preview v-if="previewIds" :ids="previewIds" @cancel="previewIds = null" @success="finishExecution" />
 </a-config-provider>
@@ -164,6 +229,6 @@
 </script>
 <script defer src="assets/vendor.159e6ddd8b26.js"></script>
 <script defer src="../海外薪酬中位值/data.js"></script>
-<script defer src="app.50f0562f3017.js"></script>
+<script defer src="app.2af4d24ef2b0.js"></script>
 </body>
 </html>
