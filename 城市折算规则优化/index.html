@@ -52,15 +52,15 @@
     <div class="item-group-up">
       <a-form-item label="二级部门">
         <!-- 对应 DeptTreeSelect；field-names及样式沿用skill -->
-        <a-tree-select v-model:value="filters.department" class="org-tree-module org-tree" :tree-data="departmentOptions" :field-names="departmentFieldNames" tree-node-filter-prop="name" show-search allow-clear placeholder="请选择二级部门" />
+        <a-tree-select v-model:value="filters.department" class="org-tree-module org-tree" :tree-data="departmentOptions" :field-names="departmentFieldNames" tree-node-filter-prop="name" multiple show-search allow-clear placeholder="请选择二级部门" />
       </a-form-item>
       <a-form-item label="国家">
         <!-- 对应 MySelect；本地国家字典 -->
-        <a-select v-model:value="filters.country" class="my-select" :options="countryOptions" show-search allow-clear option-filter-prop="label" placeholder="请选择国家" />
+        <a-select v-model:value="filters.country" class="my-select" :options="countryOptions" mode="multiple" show-search allow-clear option-filter-prop="label" placeholder="请选择国家" />
       </a-form-item>
       <a-form-item label="启用状态">
         <!-- 对应 DictSelect；启用状态mock -->
-        <a-select v-model:value="filters.status" class="my-dict-select" :options="statusOptions" allow-clear placeholder="全部" />
+        <a-select v-model:value="filters.status" class="my-dict-select" :options="statusOptions" mode="multiple" allow-clear placeholder="全部" />
       </a-form-item>
     </div>
     <div class="search-action"><a-button @click="reset"><template #icon><i-reload /></template>重置</a-button><a-button type="primary" html-type="submit"><template #icon><i-search /></template>查询</a-button></div>
@@ -75,15 +75,19 @@
       <a-tooltip title="列设置"><button class="column-placeholder" type="button" aria-label="列设置"><i-setting /></button></a-tooltip>
     </div>
   </div>
-  <!-- 对应 dynamic-table；只读时间、五个业务列及行图标，复选框用于批量执行 -->
-  <proto-table :columns="columns" :data-source="visibleRules" :pagination="pagination" :row-selection="selection" row-key="id" :scroll="{x:1000}" @change="changePage">
+  <!-- 对应 dynamic-table；配置摘要与执行时间，复选框用于批量执行 -->
+  <proto-table :columns="columns" :data-source="visibleRules" :pagination="pagination" :row-selection="selection" row-key="id" :scroll="{x:tableWidth}" @change="changePage">
     <template #bodyCell="{column,record}">
       <template v-if="column.key === 'country'">{{ countryName(record.country) }}</template>
+      <template v-else-if="column.key === 'baseline'">{{ record.baseline || '国家标准' }}</template>
+      <template v-else-if="column.key === 'status'"><a-badge :status="record.enabled ? 'success' : 'default'" :text="record.enabled ? '启用' : '停用'" /></template>
+      <template v-else-if="column.key === 'tiers'"><span class="tier-summary">{{ record.tiers.map(tier => tier.name + '：' + formatFactor(tier.factor)).join('；') || '--' }}</span></template>
       <template v-else-if="column.key === 'editedAt' || column.key === 'executedAt'"><span class="number">{{ formatTime(record[column.key]) }}</span></template>
       <template v-else-if="column.key === 'action'">
         <a-tooltip title="编辑"><button class="table-icon-btn" type="button" :aria-label="'编辑 · ' + record.department + ' · ' + countryName(record.country)" @click="openEdit(record)"><i-edit /></button></a-tooltip>
-        <a-tooltip :title="record.enabled ? '执行刷新' : '已停用，不可执行' "><span><button class="table-icon-btn" type="button" :disabled="!record.enabled" :aria-label="'执行刷新 · ' + record.department + ' · ' + countryName(record.country)" @click="execute([record.id])"><i-reload /></button></span></a-tooltip>
+        <a-tooltip v-if="record.enabled" title="执行刷新"><button class="table-icon-btn" type="button" :aria-label="'执行刷新 · ' + record.department + ' · ' + countryName(record.country)" @click="execute([record.id])"><i-reload /></button></a-tooltip>
         <a-tooltip :title="record.enabled ? '停用' : '启用'"><button class="table-icon-btn" :class="record.enabled ? 'is-danger' : 'is-success'" type="button" :aria-label="(record.enabled ? '停用' : '启用') + ' · ' + record.department + ' · ' + countryName(record.country)" @click="changeStatus(record)"><i-stop v-if="record.enabled" /><i-play v-else /></button></a-tooltip>
+        <a-tooltip v-if="!record.enabled" title="删除"><button class="table-icon-btn is-danger" type="button" :aria-label="'删除 · ' + record.department + ' · ' + countryName(record.country)" @click="deleteRule(record)"><i-delete /></button></a-tooltip>
       </template>
     </template>
   </proto-table>
@@ -228,6 +232,6 @@
 </script>
 <script defer src="assets/vendor.159e6ddd8b26.js"></script>
 <script defer src="../海外薪酬中位值/data.js"></script>
-<script defer src="app.2af4d24ef2b0.js"></script>
+<script defer src="app.6ad3bc509f1e.js"></script>
 </body>
 </html>

@@ -135,6 +135,13 @@
     rule.editedAt = new Date().toISOString();
     save(storage, state);
   }
+  function removeRule(storage, id) {
+    const state = read(storage), rule = state.cityConversion.rules.find(item => item.id === id);
+    if (!rule || !authorized(rule)) throw new Error('方案不存在或无权限操作');
+    if (rule.enabled) throw new Error('请先停用方案后再删除');
+    state.cityConversion.rules = state.cityConversion.rules.filter(item => item.id !== id);
+    save(storage, state);
+  }
   // Non-negative decimal multiplication and half-up rounding using integer arithmetic.
   function decimal(value) {
     const match = String(value).match(/^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i);
@@ -230,7 +237,7 @@
     });
   }
   const api = { STORE_KEY, departments, currencies, countries, labels, fields, copy, norm, ruleKey, rowKey, conditionKey, countryName, authorized,
-    initialize, read, save, baselines, cityCatalog, ruleErrors, saveRule, toggleRule, multiply, preview, commit, objects };
+    initialize, read, save, baselines, cityCatalog, ruleErrors, saveRule, toggleRule, removeRule, multiply, preview, commit, objects };
   root.CityConversion = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : window);

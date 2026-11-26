@@ -135,6 +135,13 @@
     rule.editedAt = new Date().toISOString();
     save(storage, state);
   }
+  function removeRule(storage, id) {
+    const state = read(storage), rule = state.cityConversion.rules.find(item => item.id === id);
+    if (!rule || !authorized(rule)) throw new Error('方案不存在或无权限操作');
+    if (rule.enabled) throw new Error('请先停用方案后再删除');
+    state.cityConversion.rules = state.cityConversion.rules.filter(item => item.id !== id);
+    save(storage, state);
+  }
   // Non-negative decimal multiplication and half-up rounding using integer arithmetic.
   function decimal(value) {
     const match = String(value).match(/^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i);
@@ -230,7 +237,7 @@
     });
   }
   const api = { STORE_KEY, departments, currencies, countries, labels, fields, copy, norm, ruleKey, rowKey, conditionKey, countryName, authorized,
-    initialize, read, save, baselines, cityCatalog, ruleErrors, saveRule, toggleRule, multiply, preview, commit, objects };
+    initialize, read, save, baselines, cityCatalog, ruleErrors, saveRule, toggleRule, removeRule, multiply, preview, commit, objects };
   root.CityConversion = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : window);
@@ -436,20 +443,26 @@ return {
 ;
 /* Country scheme list and simplified editor. */
 const C = window.CityConversion, UI = window.PrototypeUI;
+const listQuery = (query = { status: ['enabled'] }) => Object.fromEntries(
+  ['department', 'country', 'status'].map(key => [key, Array.isArray(query[key]) ? [...query[key]] : query[key] ? [query[key]] : []])
+);
 const app = Vue.createApp({
   template: '#page-tpl',
   data() {
     return {
       zhCN: UI.zhCN, theme: UI.theme, departmentOptions: UI.departmentOptions, departmentFieldNames: UI.departmentFieldNames,
-      rules: [], filters: { status: 'enabled' }, applied: { status: 'enabled' }, selected: [], page: 1, pageSize: 20,
+      rules: [], filters: listQuery(), applied: listQuery(), selected: [], page: 1, pageSize: 20,
       draft: null, editingId: null, errors: {}, submitted: false, tierSequence: 0, fatal: '', saving: false, previewIds: null,
       countryOptions: C.countries.map(country => ({ label: country.name, value: country.id })),
       statusOptions: [{ label: '启用', value: 'enabled' }, { label: '停用', value: 'disabled' }],
       columns: [
-        { title: '二级部门', dataIndex: 'department', key: 'department', width: 250 },
-        { title: '国家', key: 'country', width: 130 },
-        { title: '最近编辑', key: 'editedAt', width: 190 },
-        { title: '上次执行刷新', key: 'executedAt', width: 190 },
+        { title: '二级部门', dataIndex: 'department', key: 'department', width: 220, fixed: 'left' },
+        { title: '国家', key: 'country', width: 110, fixed: 'left' },
+        { title: '基准城市', key: 'baseline', width: 140 },
+        { title: '启用状态', key: 'status', width: 100 },
+        { title: '档位：系数', key: 'tiers', width: 360 },
+        { title: '最近编辑', key: 'editedAt', width: 170 },
+        { title: '上次执行刷新', key: 'executedAt', width: 180 },
         { title: '操作', key: 'action', width: 130, align: 'center', fixed: 'right' }
       ]
     };
@@ -457,12 +470,13 @@ const app = Vue.createApp({
   computed: {
     visibleRules() {
       const { department, country, status } = this.applied;
-      return this.rules.filter(C.authorized).filter(rule => (!department || rule.department === department) && (!country || rule.country === country) && (!status || rule.enabled === (status === 'enabled')))
+      return this.rules.filter(C.authorized).filter(rule => (!department.length || department.includes(rule.department)) && (!country.length || country.includes(rule.country)) && (!status.length || status.includes(rule.enabled ? 'enabled' : 'disabled')))
         .sort((a, b) => a.department.localeCompare(b.department, 'zh-CN') || C.countryName(a.country).localeCompare(C.countryName(b.country), 'zh-CN'));
     },
     pagination() { return { current: this.page, pageSize: this.pageSize, showSizeChanger: true, showQuickJumper: true, pageSizeOptions: ['10', '20', '50'], showTotal: total => '共' + total + '条数据' }; },
+    tableWidth() { return this.columns.reduce((width, column) => width + column.width, 32); },
     selection() {
-      return { selectedRowKeys: this.selected, onChange: keys => { this.selected = keys; }, getCheckboxProps: rule => ({ disabled: !rule.enabled, name: rule.id }) };
+      return { fixed: true, columnWidth: 32, selectedRowKeys: this.selected, onChange: keys => { this.selected = keys; }, getCheckboxProps: rule => ({ disabled: !rule.enabled, name: rule.id }) };
     },
     editorCountries() {
       return this.countryOptions.map(option => ({ ...option, label: option.label + ' ' + option.value, disabled: !this.editingId && this.rules.some(rule => rule.department === this.draft?.department && rule.country === option.value) }));
@@ -477,7 +491,7 @@ const app = Vue.createApp({
       C.initialize(localStorage, window.PAGE_CAPTURE.rows);
       this.reload();
       const remembered = JSON.parse(sessionStorage.getItem('hrone-city-scheme2-list-query') || 'null');
-      if (remembered) { this.filters = remembered; this.applied = { ...remembered }; }
+      if (remembered) { this.filters = listQuery(remembered); this.applied = listQuery(remembered); }
     } catch (error) { this.fatal = error.message; }
   },
   mounted() {
@@ -487,13 +501,14 @@ const app = Vue.createApp({
   beforeUnmount() { window.removeEventListener('storage', this.storageListener); },
   methods: {
     countryName: C.countryName, formatTime: UI.time,
+    formatFactor(factor) { return factor == null ? '--' : factor.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 12 }); },
     reload() { this.rules = C.read(localStorage).cityConversion.rules; },
-    search() { this.applied = { ...this.filters }; this.selected = []; this.page = 1; sessionStorage.setItem('hrone-city-scheme2-list-query', JSON.stringify(this.applied)); },
-    reset() { this.filters = { status: 'enabled' }; this.search(); },
+    search() { this.applied = listQuery(this.filters); this.selected = []; this.page = 1; sessionStorage.setItem('hrone-city-scheme2-list-query', JSON.stringify(this.applied)); },
+    reset() { this.filters = listQuery(); this.search(); },
     changePage(pagination) { this.page = pagination.current; this.pageSize = pagination.pageSize; },
     openNew() {
       this.editingId = null; this.errors = {}; this.submitted = false;
-      this.draft = { department: this.filters.department || C.departments[0], country: undefined, baseline: undefined, enabled: true, tiers: [this.createTier()] };
+      this.draft = { department: this.filters.department.length === 1 ? this.filters.department[0] : C.departments[0], country: undefined, baseline: undefined, enabled: true, tiers: [this.createTier()] };
     },
     openEdit(rule) { this.editingId = rule.id; this.errors = {}; this.submitted = false; this.draft = C.copy(rule); this.draft.baseline ||= undefined; this.draft.tiers.forEach(tier => { tier.uid = 'tier-' + (++this.tierSequence); }); },
     createTier() { return { uid: 'tier-' + (++this.tierSequence), name: '', factor: null, cities: [] }; },
@@ -558,6 +573,21 @@ const app = Vue.createApp({
       };
       if (rule.enabled) antd.Modal.confirm({ title: '停用折算方案', content: '确定停用“' + rule.department + '／' + C.countryName(rule.country) + '”？已有中位薪记录保留。', okText: '停用', cancelText: '取消', okButtonProps: { danger: true }, onOk: update });
       else update();
+    },
+    deleteRule(rule) {
+      if (rule.enabled) return;
+      antd.Modal.confirm({
+        content: '将删除“' + rule.department + ' / ' + C.countryName(rule.country) + '”的全部城市折算规则。',
+        okText: '删除', cancelText: '取消', okType: 'danger',
+        onOk: close => {
+          try {
+            C.removeRule(localStorage, rule.id);
+            this.reload(); this.selected = this.selected.filter(id => id !== rule.id);
+            this.page = Math.min(this.page, Math.max(1, Math.ceil(this.visibleRules.length / this.pageSize)));
+            close(); antd.message.success('城市折算方案已删除');
+          } catch (error) { antd.message.error('删除失败：' + error.message); }
+        }
+      });
     },
     finishExecution(result) {
       this.previewIds = null;

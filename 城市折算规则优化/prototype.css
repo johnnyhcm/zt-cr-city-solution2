@@ -272,6 +272,7 @@
 .table-icon-btn.is-success{background:#e0f7ea;color:#00b259}.table-icon-btn.is-danger{background:#fff0f0;color:#ff4d4f}
 .column-placeholder{border:0;background:transparent;color:#888;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;cursor:default}
 .selection-count{color:#666}.selection-clear{margin-left:8px;cursor:pointer}.number{font-variant-numeric:tabular-nums}
+.tier-summary{font-variant-numeric:tabular-nums;overflow-wrap:anywhere;line-height:22px}
     .overview-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; padding:4px 0 16px; }
     .field-label { display:block; color:#666; margin-bottom:5px; }
     .enabled-control { display:flex; align-items:center; gap:8px; min-height:30px; }
